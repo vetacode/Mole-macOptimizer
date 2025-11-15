@@ -120,8 +120,12 @@ readonly LOG_MAX_SIZE_DEFAULT=1048576 # 1MB
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")" 2> /dev/null || true
 
-# Log file maintenance (must be defined before logging functions)
-rotate_log() {
+# Log rotation check (called once at startup, not per log entry)
+rotate_log_once() {
+    # Skip if already checked this session
+    [[ -n "${MOLE_LOG_ROTATED:-}" ]] && return 0
+    export MOLE_LOG_ROTATED=1
+
     local max_size="${MOLE_MAX_LOG_SIZE:-$LOG_MAX_SIZE_DEFAULT}"
     if [[ -f "$LOG_FILE" ]] && [[ $(stat -f%z "$LOG_FILE" 2> /dev/null || echo 0) -gt "$max_size" ]]; then
         mv "$LOG_FILE" "${LOG_FILE}.old" 2> /dev/null || true
@@ -129,36 +133,34 @@ rotate_log() {
     fi
 }
 
-# Enhanced logging functions with file logging support
+# Simplified logging functions (no per-call rotation check)
 log_info() {
-    rotate_log
     echo -e "${BLUE}$1${NC}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $1" >> "$LOG_FILE" 2> /dev/null || true
 }
 
 log_success() {
-    rotate_log
     echo -e "  ${GREEN}${ICON_SUCCESS}${NC} $1"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1" >> "$LOG_FILE" 2> /dev/null || true
 }
 
 log_warning() {
-    rotate_log
     echo -e "${YELLOW}$1${NC}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1" >> "$LOG_FILE" 2> /dev/null || true
 }
 
 log_error() {
-    rotate_log
     echo -e "${RED}${ICON_ERROR}${NC} $1" >&2
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >> "$LOG_FILE" 2> /dev/null || true
 }
 
 log_header() {
-    rotate_log
     echo -e "\n${PURPLE}${ICON_ARROW} $1${NC}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] SECTION: $1" >> "$LOG_FILE" 2> /dev/null || true
 }
+
+# Call rotation check once when common.sh is sourced
+rotate_log_once
 
 # Icon output helpers
 icon_confirm() {
@@ -244,7 +246,7 @@ show_cursor() {
     printf '\033[?25h'
 }
 
-# Keyboard input handling (simple and robust)
+# Keyboard input handling (simplified)
 read_key() {
     local key rest read_status
 
@@ -260,7 +262,6 @@ read_key() {
 
     # Raw typing mode (filter): map most keys to CHAR:<key>
     if [[ "${MOLE_READ_KEY_FORCE_CHAR:-}" == "1" ]]; then
-        # Some terminals return empty on Enter with -n1
         if [[ -z "$key" ]]; then
             echo "ENTER"
             return 0
@@ -269,17 +270,13 @@ read_key() {
             $'\n' | $'\r') echo "ENTER" ;;
             $'\x7f' | $'\x08') echo "DELETE" ;;
             $'\x1b') echo "QUIT" ;; # ESC cancels filter
-            *)
-                case "$key" in
-                    [[:print:]]) echo "CHAR:$key" ;;
-                    *) echo "OTHER" ;;
-                esac
-                ;;
+            [[:print:]]) echo "CHAR:$key" ;;
+            *) echo "OTHER" ;;
         esac
         return 0
     fi
 
-    # Some terminals can yield empty on Enter with -n1; treat as ENTER
+    # Empty key = Enter
     if [[ -z "$key" ]]; then
         echo "ENTER"
         return 0
@@ -292,15 +289,14 @@ read_key() {
         'h' | 'H') echo "HELP" ;;
         'R') echo "RETRY" ;;
         'o' | 'O') echo "OPEN" ;;
-        '/') echo "FILTER" ;;               # Trigger filter mode
-        $'\x03') echo "QUIT" ;;             # Ctrl+C
-        $'\x7f' | $'\x08') echo "DELETE" ;; # Backspace/Delete key
+        '/') echo "FILTER" ;;
+        $'\x03') echo "QUIT" ;; # Ctrl+C
+        $'\x7f' | $'\x08') echo "DELETE" ;;
         $'\x1b')
             # ESC sequence - could be arrow key, delete key, or ESC alone
-            # Read the next bytes with 1s timeout for maximum compatibility
             if IFS= read -r -s -n 1 -t 1 rest 2> /dev/null; then
                 if [[ "$rest" == "[" ]]; then
-                    # Got ESC [, read next character
+                    # ESC [ sequence
                     if IFS= read -r -s -n 1 -t 1 rest2 2> /dev/null; then
                         case "$rest2" in
                             "A") echo "UP" ;;
@@ -308,74 +304,48 @@ read_key() {
                             "C") echo "RIGHT" ;;
                             "D") echo "LEFT" ;;
                             "3")
-                                # Delete key (Fn+Delete): ESC [ 3 ~
+                                # Delete key: ESC [ 3 ~
                                 IFS= read -r -s -n 1 -t 1 rest3 2> /dev/null
-                                if [[ "$rest3" == "~" ]]; then
-                                    echo "DELETE"
-                                else
-                                    echo "OTHER"
-                                fi
-                                ;;
-                            "5")
-                                # Page Up key: ESC [ 5 ~
-                                IFS= read -r -s -n 1 -t 1 rest3 2> /dev/null
-                                [[ "$rest3" == "~" ]] && echo "OTHER" || echo "OTHER"
-                                ;;
-                            "6")
-                                # Page Down key: ESC [ 6 ~
-                                IFS= read -r -s -n 1 -t 1 rest3 2> /dev/null
-                                [[ "$rest3" == "~" ]] && echo "OTHER" || echo "OTHER"
+                                [[ "$rest3" == "~" ]] && echo "DELETE" || echo "OTHER"
                                 ;;
                             *) echo "OTHER" ;;
                         esac
                     else
-                        echo "QUIT" # ESC [ timeout
+                        echo "QUIT"
                     fi
                 elif [[ "$rest" == "O" ]]; then
-                    # Application keypad mode sequences (mouse wheel often generates these)
+                    # ESC O sequence (application keypad mode)
                     if IFS= read -r -s -n 1 -t 1 rest2 2> /dev/null; then
                         case "$rest2" in
-                            "A") echo "UP" ;;     # ESC O A
-                            "B") echo "DOWN" ;;   # ESC O B
-                            "C") echo "RIGHT" ;;  # ESC O C  
-                            "D") echo "LEFT" ;;   # ESC O D
-                            *) echo "OTHER" ;;     # Ignore other ESC O sequences
+                            "A") echo "UP" ;;
+                            "B") echo "DOWN" ;;
+                            "C") echo "RIGHT" ;;
+                            "D") echo "LEFT" ;;
+                            *) echo "OTHER" ;;
                         esac
                     else
-                        echo "OTHER" # ESC O timeout
+                        echo "OTHER"
                     fi
                 else
-                    echo "OTHER" # ESC + something else (not [ or O)
+                    echo "OTHER"
                 fi
             else
-                # ESC pressed alone - treat as quit
+                # ESC alone
                 echo "QUIT"
             fi
             ;;
-        *)
-            # Printable ASCII -> expose as CHAR:<key> (for live filtering)
-            case "$key" in
-                [[:print:]]) echo "CHAR:$key" ;;
-                *) echo "OTHER" ;;
-            esac
-            ;;
+        [[:print:]]) echo "CHAR:$key" ;;
+        *) echo "OTHER" ;;
     esac
 }
 
-# Drain pending input (useful for scrolling prevention)
+# Drain pending input (simplified single-pass)
 drain_pending_input() {
     local drained=0
-    # Multiple passes with very short timeout to catch mouse wheel bursts
-    # Mouse wheel scrolling can generate rapid sequences like B^[OB^[OB^[O...
+    # Single pass with 0.01s timeout is sufficient for mouse wheel events
     while IFS= read -r -s -n 1 -t 0.01 _ 2> /dev/null; do
         ((drained++))
-        # Safety limit for mouse wheel sequences
-        [[ $drained -gt 200 ]] && break
-    done
-    # Second pass with even shorter timeout to catch any remaining input
-    while IFS= read -r -s -n 1 -t 0.001 _ 2> /dev/null; do
-        ((drained++))
-        [[ $drained -gt 500 ]] && break
+        [[ $drained -gt 100 ]] && break
     done
 }
 
@@ -869,7 +839,7 @@ prompt_action() {
     echo ""
     echo -ne "${PURPLE}${ICON_ARROW}${NC} Press ${GREEN}Enter${NC} to ${action}, ${GRAY}ESC${NC} to ${cancel}: "
     IFS= read -r -s -n1 key || key=""
-    drain_pending_input  # Clean up any escape sequence remnants
+    drain_pending_input # Clean up any escape sequence remnants
 
     case "$key" in
         $'\e') # ESC
@@ -893,7 +863,7 @@ confirm_prompt() {
     local message="$1"
     echo -n "$message (Enter=OK / ESC q=Cancel): "
     IFS= read -r -s -n1 _key || _key=""
-    drain_pending_input  # Clean up any escape sequence remnants
+    drain_pending_input # Clean up any escape sequence remnants
     case "$_key" in
         $'\e' | q | Q)
             echo ""

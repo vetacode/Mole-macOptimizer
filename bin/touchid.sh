@@ -144,7 +144,7 @@ show_menu() {
     if is_touchid_configured; then
         echo -ne "${PURPLE}☛${NC} Press ${GREEN}Enter${NC} to disable, ${GRAY}Q${NC} to quit: "
         IFS= read -r -s -n1 key || key=""
-        drain_pending_input  # Clean up any escape sequence remnants
+        drain_pending_input # Clean up any escape sequence remnants
         echo ""
 
         case "$key" in
@@ -163,7 +163,7 @@ show_menu() {
     else
         echo -ne "${PURPLE}☛${NC} Press ${GREEN}Enter${NC} to enable, ${GRAY}Q${NC} to quit: "
         IFS= read -r -s -n1 key || key=""
-        drain_pending_input  # Clean up any escape sequence remnants
+        drain_pending_input # Clean up any escape sequence remnants
 
         case "$key" in
             $'\e') # ESC

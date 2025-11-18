@@ -21,8 +21,8 @@ import (
 	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cespare/xxhash/v2"
+	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -51,30 +51,30 @@ var foldDirs = map[string]bool{
 	".hg":  true,
 
 	// JavaScript/Node
-	"node_modules":     true,
-	".npm":             true,
-	"_npx":             true, // ~/.npm/_npx global cache
-	"_cacache":         true, // ~/.npm/_cacache
-	"_logs":            true, // ~/.npm/_logs
-	"_locks":           true, // ~/.npm/_locks
-	"_quick":           true, // Quick install cache
-	"_libvips":         true, // ~/.npm/_libvips
-	"_prebuilds":       true, // ~/.npm/_prebuilds
+	"node_modules":                  true,
+	".npm":                          true,
+	"_npx":                          true, // ~/.npm/_npx global cache
+	"_cacache":                      true, // ~/.npm/_cacache
+	"_logs":                         true, // ~/.npm/_logs
+	"_locks":                        true, // ~/.npm/_locks
+	"_quick":                        true, // Quick install cache
+	"_libvips":                      true, // ~/.npm/_libvips
+	"_prebuilds":                    true, // ~/.npm/_prebuilds
 	"_update-notifier-last-checked": true, // npm update notifier
-	".yarn":            true,
-	".pnpm-store":      true,
-	".next":            true,
-	".nuxt":            true,
-	"bower_components": true,
-	".vite":            true,
-	".turbo":           true,
-	".parcel-cache":    true,
-	".nx":              true,
-	".rush":            true,
-	"tnpm":             true, // Taobao npm
-	".tnpm":            true, // Taobao npm cache
-	".bun":             true, // Bun cache
-	".deno":            true, // Deno cache
+	".yarn":                         true,
+	".pnpm-store":                   true,
+	".next":                         true,
+	".nuxt":                         true,
+	"bower_components":              true,
+	".vite":                         true,
+	".turbo":                        true,
+	".parcel-cache":                 true,
+	".nx":                           true,
+	".rush":                         true,
+	"tnpm":                          true, // Taobao npm
+	".tnpm":                         true, // Taobao npm cache
+	".bun":                          true, // Bun cache
+	".deno":                         true, // Deno cache
 
 	// Python
 	"__pycache__":   true,
@@ -122,27 +122,27 @@ var foldDirs = map[string]bool{
 	".fleet":  true,
 
 	// Cache directories
-	".cache":          true,
-	"__MACOSX":        true,
-	".DS_Store":       true,
-	".Trash":          true,
-	"Caches":          true,
-	".Spotlight-V100": true,
-	".fseventsd":      true,
+	".cache":                  true,
+	"__MACOSX":                true,
+	".DS_Store":               true,
+	".Trash":                  true,
+	"Caches":                  true,
+	".Spotlight-V100":         true,
+	".fseventsd":              true,
 	".DocumentRevisions-V100": true,
-	".TemporaryItems": true,
-	"$RECYCLE.BIN":    true,
-	".temp":           true,
-	".tmp":            true,
-	"_temp":           true,
-	"_tmp":            true,
-	".Homebrew":       true, // Homebrew cache
-	".rustup":         true, // Rust toolchain
-	".sdkman":         true, // SDK manager
-	".nvm":            true, // Node version manager
+	".TemporaryItems":         true,
+	"$RECYCLE.BIN":            true,
+	".temp":                   true,
+	".tmp":                    true,
+	"_temp":                   true,
+	"_tmp":                    true,
+	".Homebrew":               true, // Homebrew cache
+	".rustup":                 true, // Rust toolchain
+	".sdkman":                 true, // SDK manager
+	".nvm":                    true, // Node version manager
 
 	// macOS specific
-	"Application Scripts": true, // macOS sandboxed app scripts (can have many subdirs)
+	"Application Scripts":     true, // macOS sandboxed app scripts (can have many subdirs)
 	"Saved Application State": true, // App state snapshots
 
 	// iCloud
@@ -444,7 +444,7 @@ func createOverviewEntries() []dirEntry {
 		dirEntry{name: "System Library", path: "/Library", isDir: true, size: -1},
 	)
 
-	// Add Volumes if exists
+	// Add Volumes shortcut only when it contains real mounted folders (e.g., external disks)
 	if hasUsefulVolumeMounts("/Volumes") {
 		entries = append(entries, dirEntry{name: "Volumes", path: "/Volumes", isDir: true, size: -1})
 	}
@@ -459,12 +459,18 @@ func hasUsefulVolumeMounts(path string) bool {
 	}
 
 	for _, entry := range entries {
-		if entry.Type()&fs.ModeSymlink != 0 {
-			continue // Skip synthetic system links like "Macintosh HD"
+		name := entry.Name()
+		// Skip hidden control entries for Spotlight/TimeMachine etc.
+		if strings.HasPrefix(name, ".") {
+			continue
 		}
-		info, err := entry.Info()
+
+		info, err := os.Lstat(filepath.Join(path, name))
 		if err != nil {
 			continue
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			continue // Ignore the synthetic MacintoshHD link
 		}
 		if info.IsDir() {
 			return true
@@ -1781,7 +1787,7 @@ func truncateMiddle(s string, maxWidth int) string {
 	headIdx := 0
 	for i, r := range runes {
 		w := runeWidth(r)
-		if headWidth + w > targetHeadWidth {
+		if headWidth+w > targetHeadWidth {
 			break
 		}
 		headWidth += w
@@ -1793,7 +1799,7 @@ func truncateMiddle(s string, maxWidth int) string {
 	tailIdx := len(runes)
 	for i := len(runes) - 1; i >= 0; i-- {
 		w := runeWidth(runes[i])
-		if tailWidth + w > targetTailWidth {
+		if tailWidth+w > targetTailWidth {
 			break
 		}
 		tailWidth += w

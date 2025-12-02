@@ -387,19 +387,16 @@ func renderNetworkCard(netStats []NetworkStatus, proxy ProxyStatus) cardData {
 		txBar := netBar(totalTx)
 		lines = append(lines, fmt.Sprintf("Down   %s  %s", rxBar, formatRate(totalRx)))
 		lines = append(lines, fmt.Sprintf("Up     %s  %s", txBar, formatRate(totalTx)))
-		// Proxy + IP
-		info := ""
+		// Show proxy and IP in one line
+		var infoParts []string
 		if proxy.Enabled {
-			info = okStyle.Render("Proxy: " + proxy.Type)
+			infoParts = append(infoParts, "Proxy "+proxy.Type)
 		}
 		if primaryIP != "" {
-			if info != "" {
-				info += " · "
-			}
-			info += primaryIP
+			infoParts = append(infoParts, primaryIP)
 		}
-		if info != "" {
-			lines = append(lines, subtleStyle.Render(info))
+		if len(infoParts) > 0 {
+			lines = append(lines, subtleStyle.Render(strings.Join(infoParts, " · ")))
 		}
 	}
 	return cardData{icon: iconNetwork, title: "Network", lines: lines}
@@ -430,13 +427,18 @@ func renderBatteryCard(batts []BatteryStatus, thermal ThermalStatus) cardData {
 		lines = append(lines, subtleStyle.Render("No battery"))
 	} else {
 		b := batts[0]
-		// Line 1: label + percentage + bar
-		lines = append(lines, fmt.Sprintf("Level  %3.0f%%  %s", b.Percent, progressBar(b.Percent)))
+		// Line 1: label + bar + percentage (consistent with other cards)
+		// Only show red when battery is critically low
+		statusLower := strings.ToLower(b.Status)
+		percentText := fmt.Sprintf("%5.1f%%", b.Percent)
+		if b.Percent < 20 && statusLower != "charging" && statusLower != "charged" {
+			percentText = dangerStyle.Render(percentText)
+		}
+		lines = append(lines, fmt.Sprintf("Level  %s  %s", batteryProgressBar(b.Percent), percentText))
 
 		// Line 2: status
 		statusIcon := ""
 		statusStyle := subtleStyle
-		statusLower := strings.ToLower(b.Status)
 		if statusLower == "charging" || statusLower == "charged" {
 			statusIcon = " ⚡"
 			statusStyle = okStyle
@@ -541,11 +543,46 @@ func progressBar(percent float64) string {
 	return colorizePercent(percent, builder.String())
 }
 
+func batteryProgressBar(percent float64) string {
+	total := 18
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	filled := int(percent / 100 * float64(total))
+	if filled > total {
+		filled = total
+	}
+
+	var builder strings.Builder
+	for i := 0; i < total; i++ {
+		if i < filled {
+			builder.WriteString("█")
+		} else {
+			builder.WriteString("░")
+		}
+	}
+	return colorizeBattery(percent, builder.String())
+}
+
 func colorizePercent(percent float64, s string) string {
 	switch {
 	case percent >= 90:
 		return dangerStyle.Render(s)
 	case percent >= 70:
+		return warnStyle.Render(s)
+	default:
+		return okStyle.Render(s)
+	}
+}
+
+func colorizeBattery(percent float64, s string) string {
+	switch {
+	case percent < 20:
+		return dangerStyle.Render(s)
+	case percent < 50:
 		return warnStyle.Render(s)
 	default:
 		return okStyle.Render(s)

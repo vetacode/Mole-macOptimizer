@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/core/common.sh"
 source "$SCRIPT_DIR/../lib/ui/menu_paginated.sh"
 source "$SCRIPT_DIR/../lib/ui/app_selector.sh"
-source "$SCRIPT_DIR/../lib/uninstall.sh"
+source "$SCRIPT_DIR/../lib/uninstall/batch.sh"
 
 # Note: Bundle preservation logic is now in lib/core/common.sh
 
@@ -28,37 +28,6 @@ declare -a selection_state=()
 total_items=0
 files_cleaned=0
 total_size_cleaned=0
-
-# Get app last used date in human readable format
-get_app_last_used() {
-    local app_path="$1"
-    local last_used
-    last_used=$(mdls -name kMDItemLastUsedDate -raw "$app_path" 2> /dev/null)
-
-    if [[ "$last_used" == "(null)" || -z "$last_used" ]]; then
-        echo "Never"
-    else
-        local last_used_epoch
-        last_used_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S %z" "$last_used" "+%s" 2> /dev/null)
-        local current_epoch
-        current_epoch=$(date "+%s")
-        local days_ago=$(((current_epoch - last_used_epoch) / 86400))
-
-        if [[ $days_ago -eq 0 ]]; then
-            echo "Today"
-        elif [[ $days_ago -eq 1 ]]; then
-            echo "Yesterday"
-        elif [[ $days_ago -lt 30 ]]; then
-            echo "${days_ago} days ago"
-        elif [[ $days_ago -lt 365 ]]; then
-            local months_ago=$((days_ago / 30))
-            echo "${months_ago} month(s) ago"
-        else
-            local years_ago=$((days_ago / 365))
-            echo "${years_ago} year(s) ago"
-        fi
-    fi
-}
 
 # Compact the "last used" descriptor for aligned summaries
 format_last_used_summary() {
@@ -213,8 +182,9 @@ scan_applications() {
         app_data_tuples+=("${app_path}|${app_name}|${bundle_id}|${display_name}")
     done < <(
         # Scan both system and user application directories
-        find /Applications -name "*.app" -maxdepth 1 -print0 2> /dev/null
-        find ~/Applications -name "*.app" -maxdepth 1 -print0 2> /dev/null
+        # Using maxdepth 3 to find apps in subdirectories (e.g., Adobe apps in /Applications/Adobe X/)
+        find /Applications -name "*.app" -maxdepth 3 -print0 2> /dev/null
+        find ~/Applications -name "*.app" -maxdepth 3 -print0 2> /dev/null
     )
 
     # Second pass: process each app with parallel size calculation
@@ -397,205 +367,6 @@ load_applications() {
     fi
 
     return 0
-}
-
-# Old display_apps function removed - replaced by new menu system
-
-# Read a single key with proper escape sequence handling
-# This function has been replaced by the menu.sh library
-
-# Note: App file discovery and size calculation functions moved to lib/core/common.sh
-# Use find_app_files() and calculate_total_size() from common.sh
-
-# Uninstall selected applications
-uninstall_applications() {
-    local total_size_freed=0
-
-    echo ""
-    echo -e "${PURPLE}${ICON_ARROW} Uninstalling selected applications${NC}"
-
-    if [[ ${#selected_apps[@]} -eq 0 ]]; then
-        log_warning "No applications selected for uninstallation"
-        return 0
-    fi
-
-    for selected_app in "${selected_apps[@]}"; do
-        IFS='|' read -r epoch app_path app_name bundle_id size last_used <<< "$selected_app"
-
-        echo ""
-
-        # Check if app is running (use app path for precise matching)
-        if pgrep -f "$app_path" > /dev/null 2>&1; then
-            echo -e "${YELLOW}${ICON_ERROR} $app_name is currently running${NC}"
-            read -p "  Force quit $app_name? (y/N): " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                # Retry kill operation with verification to avoid TOCTOU
-                local retry=0
-                while [[ $retry -lt 3 ]]; do
-                    pkill -f "$app_path" 2> /dev/null || true
-                    sleep 1
-                    # Verify app was killed
-                    if ! pgrep -f "$app_path" > /dev/null 2>&1; then
-                        break
-                    fi
-                    ((retry++))
-                done
-
-                # Final check
-                if pgrep -f "$app_path" > /dev/null 2>&1; then
-                    log_warning "Failed to quit $app_name after $retry attempts"
-                fi
-            else
-                echo -e "  ${BLUE}${ICON_EMPTY}${NC} Skipped $app_name"
-                continue
-            fi
-        fi
-
-        # Find related files (user-level)
-        local related_files
-        related_files=$(find_app_files "$bundle_id" "$app_name")
-
-        # Find system-level files (requires sudo)
-        local system_files
-        system_files=$(find_app_system_files "$bundle_id" "$app_name")
-
-        # Calculate total size
-        local app_size_kb
-        app_size_kb=$(du -sk "$app_path" 2> /dev/null | awk '{print $1}' || echo "0")
-        local related_size_kb
-        related_size_kb=$(calculate_total_size "$related_files")
-        local system_size_kb
-        system_size_kb=$(calculate_total_size "$system_files")
-        local total_kb=$((app_size_kb + related_size_kb + system_size_kb))
-
-        # Show what will be removed
-        echo -e "${BLUE}${ICON_CONFIRM}${NC} $app_name - Files to be removed:"
-        echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Application: $(echo "$app_path" | sed "s|$HOME|~|")"
-
-        # Show user-level files
-        while IFS= read -r file; do
-            [[ -n "$file" && -e "$file" ]] && echo -e "  ${GREEN}${ICON_SUCCESS}${NC} $(echo "$file" | sed "s|$HOME|~|")"
-        done <<< "$related_files"
-
-        # Show system-level files
-        if [[ -n "$system_files" ]]; then
-            while IFS= read -r file; do
-                [[ -n "$file" && -e "$file" ]] && echo -e "  ${BLUE}${ICON_SOLID}${NC} System: $file"
-            done <<< "$system_files"
-        fi
-
-        local size_display
-        if [[ $total_kb -gt 1048576 ]]; then # > 1GB
-            size_display=$(echo "$total_kb" | awk '{printf "%.2fGB", $1/1024/1024}')
-        elif [[ $total_kb -gt 1024 ]]; then # > 1MB
-            size_display=$(echo "$total_kb" | awk '{printf "%.1fMB", $1/1024}')
-        else
-            size_display="${total_kb}KB"
-        fi
-
-        echo -e "  ${BLUE}Total size: $size_display${NC}"
-        echo
-
-        read -p "  Proceed with uninstalling $app_name? (y/N): " -n 1 -r
-        echo
-
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            # Stop Launch Agents and Daemons before removal
-            # User-level Launch Agents
-            for plist in ~/Library/LaunchAgents/"$bundle_id"*.plist; do
-                if [[ -f "$plist" ]]; then
-                    launchctl unload "$plist" 2> /dev/null || true
-                fi
-            done
-            # System-level Launch Agents
-            for plist in /Library/LaunchAgents/"$bundle_id"*.plist; do
-                if [[ -f "$plist" ]]; then
-                    sudo launchctl unload "$plist" 2> /dev/null || true
-                fi
-            done
-            # System-level Launch Daemons
-            for plist in /Library/LaunchDaemons/"$bundle_id"*.plist; do
-                if [[ -f "$plist" ]]; then
-                    sudo launchctl unload "$plist" 2> /dev/null || true
-                fi
-            done
-
-            # Remove the application
-            if safe_remove "$app_path" true; then
-                echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Removed application"
-            else
-                echo -e "  ${RED}${ICON_ERROR}${NC} Failed to remove $app_path"
-                continue
-            fi
-
-            # Remove user-level related files
-            while IFS= read -r file; do
-                if [[ -n "$file" && -e "$file" ]]; then
-                    # Handle symbolic links separately (only remove the link, not the target)
-                    if [[ -L "$file" ]]; then
-                        if rm "$file" 2> /dev/null; then
-                            echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Removed $(echo "$file" | sed "s|$HOME|~|" | xargs basename)"
-                        fi
-                    else
-                        if safe_remove "$file" true; then
-                            echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Removed $(echo "$file" | sed "s|$HOME|~|" | xargs basename)"
-                        fi
-                    fi
-                fi
-            done <<< "$related_files"
-
-            # Remove system-level files (requires sudo)
-            if [[ -n "$system_files" ]]; then
-                echo -e "  ${BLUE}${ICON_SOLID}${NC} Admin access required for system files"
-                while IFS= read -r file; do
-                    if [[ -n "$file" && -e "$file" ]]; then
-                        # Handle symbolic links separately (only remove the link, not the target)
-                        if [[ -L "$file" ]]; then
-                            if sudo rm "$file" 2> /dev/null; then
-                                echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Removed $(basename "$file")"
-                            else
-                                echo -e "  ${YELLOW}${ICON_ERROR}${NC} Failed to remove: $file"
-                            fi
-                        else
-                            if safe_sudo_remove "$file"; then
-                                echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Removed $(basename "$file")"
-                            else
-                                echo -e "  ${YELLOW}${ICON_ERROR}${NC} Failed to remove: $file"
-                            fi
-                        fi
-                    fi
-                done <<< "$system_files"
-            fi
-
-            ((total_size_freed += total_kb))
-            ((files_cleaned++))
-            ((total_items++))
-
-            echo -e "  ${GREEN}${ICON_SUCCESS}${NC} $app_name uninstalled successfully"
-        else
-            echo -e "  ${BLUE}${ICON_EMPTY}${NC} Skipped $app_name"
-        fi
-    done
-
-    # Show final summary
-    echo -e "${PURPLE}${ICON_ARROW} Uninstallation Summary${NC}"
-
-    if [[ $total_size_freed -gt 0 ]]; then
-        local freed_display
-        if [[ $total_size_freed -gt 1048576 ]]; then # > 1GB
-            freed_display=$(echo "$total_size_freed" | awk '{printf "%.2fGB", $1/1024/1024}')
-        elif [[ $total_size_freed -gt 1024 ]]; then # > 1MB
-            freed_display=$(echo "$total_size_freed" | awk '{printf "%.1fMB", $1/1024}')
-        else
-            freed_display="${total_size_freed}KB"
-        fi
-
-        echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Freed $freed_display of disk space"
-    fi
-
-    echo -e "  ${GREEN}${ICON_SUCCESS}${NC} Applications uninstalled: $files_cleaned"
-    ((total_size_cleaned += total_size_freed))
 }
 
 # Cleanup function - restore cursor and clean up

@@ -78,7 +78,7 @@ EOF
     run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc << 'EOF'
 set -euo pipefail
 source "$PROJECT_ROOT/lib/core/common.sh"
-source "$PROJECT_ROOT/lib/uninstall.sh"
+source "$PROJECT_ROOT/lib/uninstall/batch.sh"
 
 # Test stubs
 request_sudo_access() { return 0; }
@@ -120,7 +120,7 @@ EOF
     run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc << 'EOF'
 set -euo pipefail
 source "$PROJECT_ROOT/lib/core/common.sh"
-source "$PROJECT_ROOT/lib/uninstall.sh"
+source "$PROJECT_ROOT/lib/uninstall/batch.sh"
 
 # Valid base64 encoded path list
 valid_data=$(printf '/path/one\n/path/two' | base64)
@@ -135,7 +135,7 @@ EOF
     run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc << 'EOF'
 set -euo pipefail
 source "$PROJECT_ROOT/lib/core/common.sh"
-source "$PROJECT_ROOT/lib/uninstall.sh"
+source "$PROJECT_ROOT/lib/uninstall/batch.sh"
 
 # Invalid base64 - function should return empty and fail
 if result=$(decode_file_list "not-valid-base64!!!" "TestApp" 2>/dev/null); then
@@ -154,7 +154,7 @@ EOF
     run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc << 'EOF'
 set -euo pipefail
 source "$PROJECT_ROOT/lib/core/common.sh"
-source "$PROJECT_ROOT/lib/uninstall.sh"
+source "$PROJECT_ROOT/lib/uninstall/batch.sh"
 
 # Empty base64
 empty_data=$(printf '' | base64)
@@ -170,7 +170,7 @@ EOF
     run env HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" bash --noprofile --norc << 'EOF'
 set -euo pipefail
 source "$PROJECT_ROOT/lib/core/common.sh"
-source "$PROJECT_ROOT/lib/uninstall.sh"
+source "$PROJECT_ROOT/lib/uninstall/batch.sh"
 
 # Relative path - function should reject it
 bad_data=$(printf 'relative/path' | base64)

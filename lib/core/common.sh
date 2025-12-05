@@ -106,6 +106,7 @@ get_file_size() {
 # Get file modification time (epoch seconds) using BSD stat
 get_file_mtime() {
     local file="$1"
+    [[ -z "$file" ]] && { echo "0"; return; }
     local result
     result=$($STAT_BSD -f%m "$file" 2> /dev/null)
     echo "${result:-0}"
@@ -1171,6 +1172,7 @@ clean_tool_cache() {
 # Returns: size in KB, or 0 if path doesn't exist or error occurs
 get_path_size_kb() {
     local path="$1"
+    [[ -z "$path" || ! -e "$path" ]] && { echo "0"; return; }
     local result
     result=$(command du -sk "$path" 2> /dev/null | awk '{print $1}')
     echo "${result:-0}"

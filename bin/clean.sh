@@ -834,9 +834,9 @@ perform_cleanup() {
                     bundle_id="${bundle_id%.binarycookies}"
 
                     if is_orphaned "$bundle_id" "$match"; then
-                        # Use timeout to prevent du from hanging on network mounts or problematic paths
+                        # Use timeout to prevent du from hanging on large/problematic directories
                         local size_kb
-                        size_kb=$(run_with_timeout 5 get_path_size_kb "$match")
+                        size_kb=$(run_with_timeout 2 du -sk "$match" 2> /dev/null | awk '{print $1}' || echo "0")
                         if [[ -z "$size_kb" || "$size_kb" == "0" ]]; then
                             continue
                         fi

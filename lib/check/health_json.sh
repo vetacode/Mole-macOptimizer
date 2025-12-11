@@ -16,7 +16,7 @@ get_memory_info() {
 
     # Total memory
     total_bytes=$(sysctl -n hw.memsize 2> /dev/null || echo "0")
-    total_gb=$(awk "BEGIN {printf \"%.2f\", $total_bytes / (1024*1024*1024)}" 2> /dev/null || echo "0")
+    total_gb=$(LC_ALL=C awk "BEGIN {printf \"%.2f\", $total_bytes / (1024*1024*1024)}" 2> /dev/null || echo "0")
     [[ -z "$total_gb" || "$total_gb" == "" ]] && total_gb="0"
 
     # Used memory from vm_stat
@@ -24,16 +24,16 @@ get_memory_info() {
     vm_output=$(vm_stat 2> /dev/null || echo "")
     page_size=4096
 
-    active=$(echo "$vm_output" | awk '/Pages active:/ {print $NF}' | tr -d '.' 2> /dev/null || echo "0")
-    wired=$(echo "$vm_output" | awk '/Pages wired down:/ {print $NF}' | tr -d '.' 2> /dev/null || echo "0")
-    compressed=$(echo "$vm_output" | awk '/Pages occupied by compressor:/ {print $NF}' | tr -d '.' 2> /dev/null || echo "0")
+    active=$(echo "$vm_output" | LC_ALL=C awk '/Pages active:/ {print $NF}' | tr -d '.' 2> /dev/null || echo "0")
+    wired=$(echo "$vm_output" | LC_ALL=C awk '/Pages wired down:/ {print $NF}' | tr -d '.' 2> /dev/null || echo "0")
+    compressed=$(echo "$vm_output" | LC_ALL=C awk '/Pages occupied by compressor:/ {print $NF}' | tr -d '.' 2> /dev/null || echo "0")
 
     active=${active:-0}
     wired=${wired:-0}
     compressed=${compressed:-0}
 
     local used_bytes=$(((active + wired + compressed) * page_size))
-    used_gb=$(awk "BEGIN {printf \"%.2f\", $used_bytes / (1024*1024*1024)}" 2> /dev/null || echo "0")
+    used_gb=$(LC_ALL=C awk "BEGIN {printf \"%.2f\", $used_bytes / (1024*1024*1024)}" 2> /dev/null || echo "0")
     [[ -z "$used_gb" || "$used_gb" == "" ]] && used_gb="0"
 
     echo "$used_gb $total_gb"
@@ -47,16 +47,16 @@ get_disk_info() {
     df_output=$(command df -k "$home" 2> /dev/null | tail -1)
 
     local total_kb used_kb
-    total_kb=$(echo "$df_output" | awk '{print $2}' 2> /dev/null || echo "0")
-    used_kb=$(echo "$df_output" | awk '{print $3}' 2> /dev/null || echo "0")
+    total_kb=$(echo "$df_output" | LC_ALL=C awk '{print $2}' 2> /dev/null || echo "0")
+    used_kb=$(echo "$df_output" | LC_ALL=C awk '{print $3}' 2> /dev/null || echo "0")
 
     total_kb=${total_kb:-0}
     used_kb=${used_kb:-0}
     [[ "$total_kb" == "0" ]] && total_kb=1 # Avoid division by zero
 
-    total_gb=$(awk "BEGIN {printf \"%.2f\", $total_kb / (1024*1024)}" 2> /dev/null || echo "0")
-    used_gb=$(awk "BEGIN {printf \"%.2f\", $used_kb / (1024*1024)}" 2> /dev/null || echo "0")
-    used_percent=$(awk "BEGIN {printf \"%.1f\", ($used_kb / $total_kb) * 100}" 2> /dev/null || echo "0")
+    total_gb=$(LC_ALL=C awk "BEGIN {printf \"%.2f\", $total_kb / (1024*1024)}" 2> /dev/null || echo "0")
+    used_gb=$(LC_ALL=C awk "BEGIN {printf \"%.2f\", $used_kb / (1024*1024)}" 2> /dev/null || echo "0")
+    used_percent=$(LC_ALL=C awk "BEGIN {printf \"%.1f\", ($used_kb / $total_kb) * 100}" 2> /dev/null || echo "0")
 
     [[ -z "$total_gb" || "$total_gb" == "" ]] && total_gb="0"
     [[ -z "$used_gb" || "$used_gb" == "" ]] && used_gb="0"
@@ -75,7 +75,7 @@ get_uptime_days() {
     if [[ -n "$boot_time" && "$boot_time" =~ ^[0-9]+$ ]]; then
         local now=$(date +%s 2> /dev/null || echo "0")
         local uptime_sec=$((now - boot_time))
-        uptime_days=$(awk "BEGIN {printf \"%.1f\", $uptime_sec / 86400}" 2> /dev/null || echo "0")
+        uptime_days=$(LC_ALL=C awk "BEGIN {printf \"%.1f\", $uptime_sec / 86400}" 2> /dev/null || echo "0")
     else
         uptime_days="0"
     fi

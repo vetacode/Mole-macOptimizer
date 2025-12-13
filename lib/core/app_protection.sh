@@ -374,22 +374,22 @@ readonly DATA_PROTECTED_BUNDLES=(
     # ============================================================================
     # Media & Entertainment
     # ============================================================================
-    "com.spotify.client"      # Spotify
-    "com.apple.Music"         # Apple Music
-    "com.apple.podcasts"      # Apple Podcasts
+    "com.spotify.client"       # Spotify
+    "com.apple.Music"          # Apple Music
+    "com.apple.podcasts"       # Apple Podcasts
     "com.apple.BKAgentService" # Apple Books (Agent)
-    "com.apple.iBooksX"       # Apple Books
-    "com.apple.iBooks"        # Apple Books (Legacy)
-    "com.apple.FinalCutPro"   # Final Cut Pro
-    "com.apple.Motion"        # Motion
-    "com.apple.Compressor"    # Compressor
-    "com.blackmagic-design.*" # DaVinci Resolve
-    "com.colliderli.iina"     # IINA
-    "org.videolan.vlc"        # VLC
-    "io.mpv"                  # MPV
-    "com.noodlesoft.Hazel"    # Hazel (automation)
-    "tv.plex.player.desktop"  # Plex
-    "com.netease.163music"    # NetEase Music
+    "com.apple.iBooksX"        # Apple Books
+    "com.apple.iBooks"         # Apple Books (Legacy)
+    "com.apple.FinalCutPro"    # Final Cut Pro
+    "com.apple.Motion"         # Motion
+    "com.apple.Compressor"     # Compressor
+    "com.blackmagic-design.*"  # DaVinci Resolve
+    "com.colliderli.iina"      # IINA
+    "org.videolan.vlc"         # VLC
+    "io.mpv"                   # MPV
+    "com.noodlesoft.Hazel"     # Hazel (automation)
+    "tv.plex.player.desktop"   # Plex
+    "com.netease.163music"     # NetEase Music
 
     # ============================================================================
     # License Management & App Stores

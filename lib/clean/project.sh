@@ -612,7 +612,7 @@ clean_project_artifacts() {
 
         # Clean the item
         if [[ -e "$item_path" ]]; then
-            rm -rf "$item_path" 2> /dev/null || true
+            safe_remove "$item_path" true
 
             # Update stats
             if [[ ! -e "$item_path" ]]; then
